@@ -1,0 +1,223 @@
+version: '2.2'
+
+x-nifi-base: &nifi-base
+  image: mxsdata/nifi
+  networks:
+    - nifi
+
+x-nifi0-environment: &nifi0-environment
+  NIFI_CLUSTER_ADDRESS: "nifi0.mxs"
+  NIFI_WEB_HTTPS_HOST: "nifi0.mxs"
+  KEYSTORE_PATH: "/opt/certs/nifi0.mxs/keystore.jks"
+  TRUSTSTORE_PATH: "/opt/certs/nifi0.mxs/truststore.jks"
+
+x-nifi1-environment: &nifi1-environment
+  NIFI_CLUSTER_ADDRESS: "nifi1.mxs"
+  NIFI_WEB_HTTPS_HOST: "nifi1.mxs"
+  KEYSTORE_PATH: "/opt/certs/nifi1.mxs/keystore.jks"
+  TRUSTSTORE_PATH: "/opt/certs/nifi1.mxs/truststore.jks"
+
+x-nifi2-environment: &nifi2-environment
+  NIFI_CLUSTER_ADDRESS: "nifi2.mxs"
+  NIFI_WEB_HTTPS_HOST: "nifi2.mxs"
+  KEYSTORE_PATH: "/opt/certs/nifi2.mxs/keystore.jks"
+  TRUSTSTORE_PATH: "/opt/certs/nifi2.mxs/truststore.jks"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.2.1-1
+    restart: unless-stopped
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ALLOW_ANONYMOUS_LOGIN: 'true'
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - nifi
+ 
+  #broker:
+    #image: confluentinc/cp-kafka:latest
+    #restart: unless-stopped
+    #hostname: broker
+    #container_name: broker
+    #depends_on:
+      #- zookeeper
+    #ports:
+      #- "29092:29092"
+      #- "9092:9092"
+    ##environment:
+    #env_file:
+      #- docker-compose-kafka.env
+    #networks:
+      #- nifi
+
+  nifi-toolkit:
+    # apache/nifi-toolkit:1.18.0	image: apache/nifi-toolkit:1.18.0
+    image: mxsdata/nifi-toolkit
+    networks:
+      - nifi
+    container_name: nifi-toolkit
+    env_file:
+      - docker-compose-nifitoolkit.env
+    volumes:
+      - nifi_certs:/opt/certs
+    user: root
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  proxy:
+    image: nginx:1.23.1
+    restart: unless-stopped
+    container_name: proxy
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8443:8443"
+    networks:
+      - nifi
+    depends_on: 
+      - nifi0.mxs
+      - nifi1.mxs
+      - nifi2.mxs
+    user: root
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nifi0.mxs:
+    <<: *nifi-base
+    restart: unless-stopped
+    container_name: nifi0.mxs
+    depends_on:
+      nifi-toolkit:
+        #condition: service_completed_successfully
+        condition: service_started
+    volumes:
+      - nifi_certs:/opt/certs
+      #- nifi-conf:/opt/nifi/nifi-current/conf
+      - nifi_data:/opt/nifi/nifi-current
+    environment:
+      <<: *nifi0-environment
+    env_file:
+      - docker-compose-nifi.env
+      - docker-compose-nifitoolkit.env
+    links:
+      #- broker
+      - zookeeper
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - nifi
+    entrypoint:
+      - "/bin/bash"
+      - "-c"
+      - "sed -i 's/nifi.ui.banner.text=.*/nifi.ui.banner.text=nifi0.mxs (v1.18.0)/' conf/nifi.properties; ../scripts/start.sh"
+
+  nifi1.mxs:
+    <<: *nifi-base
+    restart: unless-stopped
+    container_name: nifi1.mxs
+    depends_on:
+      nifi-toolkit:
+        #condition: service_completed_successfully
+        condition: service_started
+    volumes:
+      - nifi_certs:/opt/certs
+      - nifi1_data:/opt/nifi/nifi-current
+    environment:
+      <<: *nifi1-environment
+    env_file:
+      - docker-compose-nifi.env
+      - docker-compose-nifitoolkit.env
+    links:
+      #- broker
+      - zookeeper
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - nifi
+    entrypoint:
+      - "/bin/bash"
+      - "-c"
+      - "sed -i 's/nifi.ui.banner.text=.*/nifi.ui.banner.text=nifi1.mxs (v1.18.0)/' conf/nifi.properties; ../scripts/start.sh"
+
+  nifi2.mxs:
+    <<: *nifi-base
+    restart: unless-stopped
+    container_name: nifi2.mxs
+    depends_on:
+      nifi-toolkit:
+        #condition: service_completed_successfully
+        condition: service_started
+    volumes:
+      - nifi_certs:/opt/certs
+      - nifi2_data:/opt/nifi/nifi-current
+    environment:
+      <<: *nifi2-environment
+    env_file:
+      - docker-compose-nifi.env
+      - docker-compose-nifitoolkit.env
+    links:
+      #- broker
+      - zookeeper
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - nifi
+    entrypoint:
+      - "/bin/bash"
+      - "-c"
+      - "sed -i 's/nifi.ui.banner.text=.*/nifi.ui.banner.text=nifi2.mxs (v1.18.0)/' conf/nifi.properties; ../scripts/start.sh"
+
+  nifi-registry:
+    container_name: nifi-registry
+    image: apache/nifi-registry:1.17.0
+    restart: unless-stopped
+    ports:
+      - "18080:18080"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    #ports:
+      #- target: 18080
+        #published: 18080
+        #protocol: tcp
+        #mode: host
+    #environment:
+      #- NIFI_REGISTRY_WEB_HTTP_HOST=0.0.0.0
+      #- JVM_OPTS=-Xmx2g -Xms2g -XX:MaxPermSize=1g
+    networks:
+      - nifi
+    volumes:
+      #- nifi-registry-conf:/opt/nifi/nifi-registry-current/conf
+      - nifi-registry-data:/opt/nifi/nifi-registry-current
+
+networks:
+  nifi:
+    driver: bridge
+
+volumes:
+  nifi_certs:
+  #nifi-conf:
+  nifi_data:
+  nifi1_data:
+  nifi2_data:
+  #nifi-registry-conf:
+  nifi-registry-data:

@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Creates an EC2 instance + Security Group in existing VPC to serve as host connecting to account resources
+# ec2_cloudformation_template.yaml
+# To deploy the stack, use:
+# aws cloudformation deploy --template-file ec2_cloudformation_template.yaml --stack-name ec2-nifi-stack --profile prod
+# To retrieve the ec2 private DNS address, use: 
+# aws cloudformation --region us‑east‑1 describe-stacks --stack-name ec2-nifi-stack --query "Stacks[0].Outputs[?OutputKey=='Host'].OutputValue" --output text --profile prod
+# To delete the stack, use:
+# aws cloudformation delete-stack --stack-name ec2-nifi-stack
+Parameters:
+
+  ImageId:
+    Type: String
+    #Description: 'Ubuntu Server 20.04 LTS (HVM), SSD Vol, AMI for us‑east‑1 Region'
+    #Default: 'ami-84556de5'
+    Description: 'Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type - ami-05aaa50d3cae6007d (64-bit x86)'
+    Default: 'ami-05aaa50d3cae6007d'
+  VpcId:
+    Type: String
+    Description: VPC id
+    Default: vpc-xxxxxxxxxxxxxxx
+  ec2SecurityGroup:
+    Type: String
+    Description: Security group ID of ec2
+    Default: sg-xxxxxxxxxxxxxxx
+  SubnetId:
+    Type: String
+    Description: Subnet in which to launch an EC2
+    Default: subnet-xxxxxxxxxxxxxxx
+  AvailabilityZone:
+    Type: String
+    Description: Availability Zone into which instance will launch
+    Default: us‑east‑1a
+  InstanceType:
+    Type: String
+    Description: Choose m5.xlarge machine
+    Default: m5.large
+  KeyName:
+    Description: SSH Keypair to login to the instance
+    Type: String
+    Default: xxx-data-apps
+  InstanceProfile:
+    Description: The name of an IAM instance profile
+    Type: String
+    Default: MxsDataAppsEc2Role
+  AppToPort:
+    Description: The egress port listener for applications on ec2/security group
+    Type: String
+    Default: 3306
+  AppFromPort:
+    Description: The ingress port listener for applications on ec2/security group
+    Type: String
+    Default: 3306
+
+Resources:
+  ec2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+      InstanceProfileName: String
+      Path: String
+      Roles: 
+        - !Ref InstanceProfileRole
+  ec2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "mxs-data applications host ec2 instances security group"
+      GroupName: mxs-data-nifi-Instance-ec2-sg
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 'xx.xxx.xx.xxx/32'
+          Description: 'SSH rule for public IPv4 traffic from vdi'
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 'xx.xx.xx.xx/32'
+          Description: 'SSH rule for private IPv4 traffic from vdi'
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 'xx.xxx.xx.xxx/32'
+          Description: 'SSH rule for IPv4 traffic from vdi'
+
+      Tags:
+        - Key: Name
+          Value: mxs-data-nifi-Instance-ec2-sg
+
+  mxsDataNifiInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      IamInstanceProfile: !Ref InstanceProfile
+      #IamInstanceProfile: !Ref ec2InstanceProfile
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      AvailabilityZone: !Ref AvailabilityZone
+      BlockDeviceMappings:
+        ##FOR AMZN LNX 2 AMI:
+        -
+          DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 72
+            VolumeType: gp2
+        ##FOR UBUNTU AMI:    
+        #-
+          #DeviceName: "/dev/sda1"
+          #Ebs:
+            #VolumeSize: 24
+            #VolumeType: gp2
+      KeyName: !Ref KeyName
+      SecurityGroupIds: 
+        - !Ref ec2SecurityGroup
+      SubnetId: !Ref SubnetId
+      Tags:
+        - Key: Name
+          Value: mxs-data-nifi-Instance-ec2
+Outputs:
+  #https://towardsthecloud.com/aws-cloudformation-resource-attributes
+  mxsDataNifiInstanceId:
+    Description: Instance Id 
+    Value: !Ref mxsDataNifiInstance
+  Host:
+    Description: "Private DNS name of the host Ec2 Instance"
+    Export:
+      Name: !Sub "${AWS::StackName}-host"
+    #Value: !GetAtt mxsDataNifiInstance.PublicDnsName
+    Value: !GetAtt mxsDataNifiInstance.PrivateDnsName

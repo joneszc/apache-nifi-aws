@@ -1,0 +1,59 @@
+version: "3"
+
+services:
+  zk:
+    image: confluentinc/cp-zookeeper:latest
+    restart: unless-stopped
+    hostname: zk
+    container_name: zk
+    ports:
+      - "2181:2181"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  nifi:
+    cap_add:
+      - NET_ADMIN # low port bindings
+    image: apache/nifi:1.18.0
+    restart: unless-stopped
+    container_name: nifi
+    ports:
+      - "8080:8080/tcp" # HTTP interface
+      - "8443:8443/tcp" # HTTPS interface
+      - "514:514/tcp" # Syslog
+      - "514:514/udp" # Syslog
+      - "2055:2055/udp" # NetFlow
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - NIFI_WEB_PROXY_HOST=ip-xx-xxx-x-xxx.xx-xxx-xxxx-1.compute.internal:8080,ip-xx-xxx-x-xxx.xx-xxx-xxxx-x.compute.internal,localhost:8080,localhost,127.0.0.1:8080,127.0.0.1
+      #- NIFI_WEB_HTTPS_PORT=8443
+      - SINGLE_USER_CREDENTIALS_USERNAME=nifi
+      - SINGLE_USER_CREDENTIALS_PASSWORD=nifi
+      - NIFI_WEB_HTTP_PORT=8080
+      - NIFI_CLUSTER_IS_NODE=true
+      #https://stackoverflow.com/questions/69217062/docker-nifi-1-14-0-startup-failure-caused-by-org-apache-nifi-properties:
+      - NIFI_SENSITIVE_PROPS_KEY=IKFG7S5RFK4RKLBY54
+      - NIFI_CLUSTER_NODE_PROTOCOL_PORT=8082
+      - NIFI_ZK_CONNECT_STRING=zk:2181
+      - NIFI_ELECTION_MAX_WAIT=1 min
+    links:
+      #- kafka
+      - zk
+    volumes:
+      #- /home/ubuntu/DockerBuilds/nifi_kafka_test/nifi/drivers:/opt/nifi/nifi-current/drivers
+      #- /home/ubuntu/DockerBuilds/nifi_kafka_test/nifi/certs:/opt/certs
+      #- /home/ubuntu/DockerBuilds/nifi_kafka_test/nifi/shared-directory:/opt/nifi/nifi-current/ls-target
+      #- /home/ubuntu/DockerBuilds/nifi_kafka_test/nifi/conf:/opt/nifi/nifi-current/conf
+      #- nifi-conf:/opt/nifi/nifi-current/conf
+      - nifi_data:/opt/nifi/nifi-current
+
+volumes:
+  nifi_data:
