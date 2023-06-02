@@ -42,21 +42,21 @@ services:
     networks:
       - nifi
  
-  #broker:
-    #image: confluentinc/cp-kafka:latest
-    #restart: unless-stopped
-    #hostname: broker
-    #container_name: broker
-    #depends_on:
-      #- zookeeper
-    #ports:
-      #- "29092:29092"
-      #- "9092:9092"
+  broker:
+    image: confluentinc/cp-kafka:latest
+    restart: unless-stopped
+    hostname: broker
+    container_name: broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+      - "9092:9092"
     ##environment:
-    #env_file:
-      #- docker-compose-kafka.env
-    #networks:
-      #- nifi
+    env_file:
+      - docker-compose-kafka.env
+    networks:
+      - nifi
 
   nifi-toolkit:
     # apache/nifi-toolkit:1.18.0	image: apache/nifi-toolkit:1.18.0
